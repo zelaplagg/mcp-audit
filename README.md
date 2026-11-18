@@ -29,6 +29,17 @@ mcp-audit 0.1.0: scanned 'demo-poisoned-server' v0.0.1, 12 tool(s)
   ...
 ```
 
+## Key findings
+
+What building and using this showed, in short (details and numbers below):
+
+- **Real servers are mostly clean; noise is the hard part.** The official reference servers (filesystem, memory, everything) have no critical or high findings. My first version still produced 26 findings on the filesystem server alone, nearly all repeats of two patterns. Tuning against real servers, not against my own fixtures, is what made the output usable.
+- **A schema cannot express what matters most.** "Only inside these directories" lives in server code, so static analysis can flag the risk but never prove the protection exists. Findings are prompts for review, not verdicts.
+- **Models are measurably vulnerable to injection in tool results.** On `gpt-4o-mini`, a hostile instruction inside a tool result was resisted 1 time in 10 with a default prompt and 9 in 10 with a hardened one: a large effect, but not a fix, and a small sample on one model.
+- **Evals can be wrong too.** My first eval case was too strict and blamed the model for correct behaviour; repeats at temperature 0 gave false confidence. Both are documented below.
+- **The tools were checked against their own author.** `mcp-audit scan` finds nothing in [travel-mcp](https://github.com/zelaplagg/travel-mcp) or in its own `serve` tools, and flags `scan_command` as high when it is enabled, which is correct.
+- **End to end:** in Claude Desktop, asking Claude to audit a poisoned tool definition made it call `scan_tools` and report the critical finding, and it did not follow the instruction hidden in that definition (one observation, not a guarantee).
+
 ## Install
 
 ```bash
@@ -60,6 +71,9 @@ mcp-audit scan --baseline mcp-audit.lock.json -- node dist/index.js
 
 # List the rules
 mcp-audit rules
+
+# Run the auditor itself as an MCP server (see below)
+mcp-audit serve
 ```
 
 Exit codes: `0` nothing at or above `--fail-on` (default `high`), `1` findings at or above it, `2` usage or connection error. `--min-severity` hides low-severity noise (default `low`; use `info` to see everything). `--only-rule` and `--skip-rule` select rules.
@@ -165,7 +179,7 @@ There is deliberately no way to pass credentials through the tools: a model-chos
 | MCP002 | high | Invisible content: zero-width and bidi characters, Unicode tag characters (decoded for you), long encoded blobs |
 | MCP003 | medium | Dangerous capabilities: command execution, raw SQL, expressions, unconstrained file paths and URLs |
 | MCP004 | medium | Secrets passed as tool arguments (passwords, tokens, API keys) |
-| MCP005 | low | Schema hygiene: missing descriptions or schemas, unbounded strings, open `additionalProperties` |
+| MCP005 | low | Schema hygiene: missing descriptions or schemas, open `additionalProperties`; unbounded strings are one `info` finding per server |
 | MCP006 | medium | State-changing tools without `readOnlyHint` / `destructiveHint`, or annotations that contradict the tool name |
 | MCP007 | medium | Duplicate names, non-ASCII lookalikes, names one character away from well-known tools |
 | MCP008 | high | Tool or server instructions changed, added or removed since pinning (needs `--baseline`) |
@@ -179,8 +193,10 @@ Scanned with `mcp-audit 0.1.0` against the official reference servers (run via `
 | `@modelcontextprotocol/server-filesystem` | 2.3.0 | 16 | 1 medium: unconstrained `path` parameters (12 in 12 tools) |
 | `@modelcontextprotocol/server-memory` | 2.1.1 | 9 | none |
 | `@modelcontextprotocol/server-everything` | 2.3.0 | 16 | 1 medium: `readOnlyHint` on `trigger-resource-update` (name suggests a state change; a heuristic to verify in code) |
+| [`travel-mcp`](https://github.com/zelaplagg/travel-mcp) (my own) | 0.1.0 | 4 | none, including info |
+| `mcp-audit serve` (itself, default settings) | 0.1.0 | 3 | none; with `scan_command` enabled: 1 high on that tool |
 
-No critical or high findings, which is what you would expect from well-maintained reference servers.
+No critical or high findings, which is what you would expect from well-maintained reference servers. The `travel-mcp` row was scanned live over stdio, and its definitions match the snapshot used for the evals below (same names, descriptions and parameters).
 
 The `everything` server is a test fixture, and scanning it showed two over-eager rules: a resource `uri` parameter was reported as an SSRF risk (in MCP it names a resource rather than a URL to fetch, so `uri` is no longer treated as a URL parameter), and a read-only hint contradicting a tool name was rated high although a name cannot prove behaviour (now medium).
 
@@ -219,6 +235,13 @@ mcp-audit eval --cases examples/eval-travel-mcp.json --from-json examples/travel
 ```
 
 Model behaviour changes over time, so expect different numbers on a different day.
+
+## Conclusions and limitations
+
+- **Metadata is untrusted input, in both directions.** Tool descriptions steer the model, and tool results can too. The auditor applies the same rule to itself: its reports sanitise hidden characters, `serve` labels quoted evidence as untrusted and caps it, and `travel-mcp` strips hidden characters from OpenStreetMap text.
+- **Defence in depth, not one fix.** A hardened system prompt helped a lot in the eval, but one run still obeyed the injected instruction. Sanitising data, naming tool output as untrusted, confirming dangerous actions and giving tools minimal rights are layers; none is sufficient alone.
+- **What I did not verify.** The eval covers one model (`gpt-4o-mini`) and small samples, so treat the percentages as indications. The SARIF upload to GitHub code scanning is untested. Rules are heuristics and can miss attacks written in plain visible words. `scan_url` resolves a host once for its SSRF check and again for the request, so DNS rebinding is possible in theory.
+- **Only advertised metadata is audited.** A server can describe a tool honestly and still behave badly; reading its code or running it in a sandbox is outside what this tool does.
 
 ## Design notes
 
