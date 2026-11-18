@@ -31,14 +31,17 @@ mcp-audit 0.1.0: scanned 'demo-poisoned-server' v0.0.1, 12 tool(s)
 
 ## Key findings
 
-What building and using this showed, in short (details and numbers below):
+**What it gives you.** Before an MCP server reaches an assistant, `mcp-audit` tells you whether its tool descriptions try to steer the model (hidden instructions, invisible Unicode, access to `~/.ssh`), whether its schemas are risky and whether anything changed since you approved it. It runs from the command line, in CI, or as an MCP server that an assistant can ask itself. `eval` adds the other half: how well models actually use your tools.
 
-- **Real servers are mostly clean; noise is the hard part.** The official reference servers (filesystem, memory, everything) have no critical or high findings. My first version still produced 26 findings on the filesystem server alone, nearly all repeats of two patterns. Tuning against real servers, not against my own fixtures, is what made the output usable.
-- **A schema cannot express what matters most.** "Only inside these directories" lives in server code, so static analysis can flag the risk but never prove the protection exists. Findings are prompts for review, not verdicts.
-- **Models are measurably vulnerable to injection in tool results.** On `gpt-4o-mini`, a hostile instruction inside a tool result was resisted 1 time in 10 with a default prompt and 9 in 10 with a hardened one: a large effect, but not a fix, and a small sample on one model.
-- **Evals can be wrong too.** My first eval case was too strict and blamed the model for correct behaviour; repeats at temperature 0 gave false confidence. Both are documented below.
-- **The tools were checked against their own author.** `mcp-audit scan` finds nothing in [travel-mcp](https://github.com/zelaplagg/travel-mcp) or in its own `serve` tools, and flags `scan_command` as high when it is enabled, which is correct.
-- **End to end:** in Claude Desktop, asking Claude to audit a poisoned tool definition made it call `scan_tools` and report the critical finding, and it did not follow the instruction hidden in that definition (one observation, not a guarantee).
+What building and testing it showed:
+
+- **It catches the known attack shapes.** Poisoned descriptions, hidden `<IMPORTANT>` tags, concealment from the user and text smuggled in invisible Unicode tag characters (which it decodes for you) are reported as critical or high, with the evidence and a fix. In Claude Desktop, asking Claude to audit a poisoned tool made it call `scan_tools` and report the critical finding.
+- **The output is usable on real servers.** On the official filesystem, memory and everything servers it reports one medium finding, none and one medium finding, and nothing critical or high. Tuning against these servers cut the filesystem report from 26 findings to 1, and fixed two over-eager rules found on `everything`.
+- **Prompt injection in tool results is measurable.** With `gpt-4o-mini`, a hostile instruction hidden in a tool result was resisted 1 time in 10 under a default prompt and 9 times in 10 under a hardened one.
+- **Tool descriptions can be tuned with data.** Adding one sentence to a parameter description cut a model's needless clarifying questions from 3 of 5 runs to 0 of 5, and the A/B method also exposed a wrong test case of mine.
+- **It holds itself to the same standard.** `mcp-audit scan` reports no findings for [travel-mcp](https://github.com/zelaplagg/travel-mcp) or for its own `serve` tools, and flags `scan_command` as high when it is enabled, which is correct.
+
+What the numbers do not cover is listed in [Conclusions and limitations](#conclusions-and-limitations).
 
 ## Install
 
