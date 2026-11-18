@@ -31,7 +31,7 @@ mcp-audit 0.1.0: scanned 'demo-poisoned-server' v0.0.1, 12 tool(s)
 ## Install
 
 ```bash
-git clone <this repository>
+git clone https://github.com/zelaplagg/mcp-audit.git
 cd mcp-audit
 python -m pip install -e .
 ```
