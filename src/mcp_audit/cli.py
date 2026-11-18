@@ -95,6 +95,16 @@ def build_parser() -> argparse.ArgumentParser:
     ev.add_argument("--dry-run", action="store_true", help="only check the cases against the server's tools; no model calls")
     ev.add_argument("--quiet", action="store_true", help="no progress lines on stderr")
 
+    sv = sub.add_parser(
+        "serve", help="run mcp-audit itself as an MCP server (stdio)",
+        description="Expose the auditor as MCP tools so an agent can audit other servers. "
+                    "Closed by default: only offline scans and public URLs. Nothing but protocol messages goes to stdout.",
+    )
+    sv.add_argument("--allow-command", action="append", default=[], metavar="EXE",
+                    help="let scan_command start this executable (by name, repeatable); off by default")
+    sv.add_argument("--allow-private-hosts", action="store_true",
+                    help="let scan_url reach private and loopback addresses (for local development only)")
+
     sub.add_parser("rules", help="list the rules")
     return parser
 
@@ -277,6 +287,11 @@ def main(argv: list[str] | None = None) -> int:
             return _cmd_pin(args, command)
         if args.command == "eval":
             return _cmd_eval(args, command)
+        if args.command == "serve":
+            from .mcp_server import Policy, serve
+            serve(sys.stdin, sys.stdout, Policy(allow_private_hosts=args.allow_private_hosts,
+                                                 allowed_executables=frozenset(args.allow_command)))
+            return 0
         return _cmd_rules()
     except (UsageError, McpError, BaselineError, CaseError, LlmError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)

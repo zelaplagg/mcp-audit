@@ -24,3 +24,4 @@ jobs:
           mcp-audit scan --from-json examples/poisoned-tools.json --fail-on none --format sarif -o /tmp/audit.sarif
           test -s /tmp/audit.sarif
           mcp-audit eval --dry-run --from-json examples/travel-mcp-tools.json --cases examples/eval-travel-mcp.json
+          printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | mcp-audit serve | grep -q scan_tools

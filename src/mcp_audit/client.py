@@ -85,6 +85,7 @@ class StdioTransport:
         env: dict[str, str] | None = None,
         cwd: str | None = None,
         timeout: float = 30.0,
+        inherit_env: bool = True,
     ) -> None:
         if not command:
             raise McpError("no server command given")
@@ -92,7 +93,11 @@ class StdioTransport:
         self._next_id = 0
         self._lines: queue.Queue[str | None] = queue.Queue()
         self._stderr_tail: collections.deque[str] = collections.deque(maxlen=20)
-        merged_env = dict(os.environ)
+        if inherit_env:
+            merged_env = dict(os.environ)
+        else:  # an untrusted server must not see our secrets: pass only what a process needs to start
+            keep = ("PATH", "HOME", "TMPDIR", "TEMP", "TMP", "LANG", "LC_ALL", "SYSTEMROOT", "USERPROFILE")
+            merged_env = {k: v for k, v in os.environ.items() if k in keep}
         merged_env.update(env or {})
         try:
             self._proc = subprocess.Popen(

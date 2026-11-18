@@ -8,6 +8,7 @@ An MCP server tells the model what its tools do, in plain text that the model re
 - **Zero dependencies.** Pure Python standard library (3.10+). A security tool should not bring a supply chain of its own.
 - **CI friendly.** Text, JSON and SARIF 2.1.0 output, exit codes, severity thresholds.
 - **Catches rug pulls.** Pin a server's tool definitions and fail when they change later.
+- **Usable by agents.** `mcp-audit serve` exposes the auditor itself as an MCP server, closed by default (no SSRF, no arbitrary commands).
 - **Measures how well models use your tools.** `mcp-audit eval` runs golden test cases against any OpenAI-compatible model and scores tool choice, arguments, restraint and resistance to prompt injection in tool results.
 
 ```text
@@ -127,6 +128,35 @@ Things to know:
 - The API key is read from an environment variable, sent only as a bearer token, never printed, refused over plain `http://` to non-local hosts, and redirects are not followed.
 - Results from a stochastic model are a measurement, not a proof. At `--temperature 0` repeated runs in one session are strongly correlated and understate the variance, and results can still differ between invocations. To measure flakiness use `--temperature 0.7 -n 5`, and compare trends across several invocations, not single runs.
 
+## Use it as an MCP server
+
+`mcp-audit serve` exposes the auditor as MCP tools, so an assistant can answer "is this MCP server safe to add?" itself. Add it to an MCP client, for example Claude Desktop:
+
+```json
+{
+  "mcpServers": {
+    "mcp-audit": { "command": "mcp-audit", "args": ["serve"] }
+  }
+}
+```
+
+| Tool | What it does |
+|---|---|
+| `list_rules` | The rules, their default severities and what they check. |
+| `scan_tools` | Audits a `tools/list` result passed in by the model. Offline: no network, no processes. |
+| `scan_url` | Connects to a remote Streamable HTTP server and audits it. |
+| `scan_command` | Starts a local server and audits it. **Not available unless you enable it** (below). |
+
+A tool that lets a model choose what to scan is an attack surface itself, so the defaults are closed:
+
+- **No SSRF.** `scan_url` accepts only `http(s)` URLs whose host resolves to a public address: loopback, private, link-local and cloud-metadata addresses are refused, as are URLs with embedded credentials. Redirects are never followed and no credentials are sent. `--allow-private-hosts` lifts the address check for local development. The host is resolved once for the check and again by the HTTP client, so a hostile DNS server could in principle answer differently the second time; run it where internal services are not reachable if that matters.
+- **No arbitrary commands.** `scan_command` is not even listed until you allow specific executables, e.g. `mcp-audit serve --allow-command npx --allow-command node`. Only a bare executable name from that list is accepted (no paths), and the child process gets a scrubbed environment (no API keys or tokens). Note that `npx` itself will download and run whatever package it is told to, so allow it only where that is acceptable.
+- **Results are untrusted.** Findings quote text from the scanned server's metadata. Control and invisible characters are already replaced, evidence is capped at 200 characters, at most 50 findings are returned, and the response says that quoted text is data and must not be followed.
+- **Bounded input.** At most 200 tools and 1 MB of definitions per call, 2 MB per protocol message.
+- **It audits itself.** With the default settings the server's own tool definitions produce no findings from `mcp-audit scan`; enabling `scan_command` makes the scanner flag exactly that tool as a high-severity command-execution risk, which is correct. Both facts are covered by tests.
+
+There is deliberately no way to pass credentials through the tools: a model-chosen URL plus a token would be a token-exfiltration channel. To audit an authenticated server, use the CLI with `--bearer-env`.
+
 ## Rules
 
 | ID | Severity | What it finds |
@@ -208,6 +238,7 @@ The tests include a fake stdio MCP server and an HTTP one, so the client, the ru
 ## Roadmap
 
 - `eval`: multi-turn cases (several tool calls in sequence against recorded results), parallel runs, caching of identical requests, and a native Anthropic provider.
+- `serve`: Streamable HTTP transport, and an `audit_baseline` tool for rug-pull checks.
 - More rules (excessive tool count, overlapping tool descriptions, output schema checks).
 
 ## License
