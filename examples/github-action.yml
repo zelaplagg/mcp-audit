@@ -1,0 +1,35 @@
+# Copy to .github/workflows/mcp-audit.yml in the repository of an MCP server.
+# It audits the server on every pull request, uploads the findings to GitHub code scanning
+# and fails the build on high or critical findings.
+name: MCP audit
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: npm ci && npm run build
+      - run: python -m pip install git+https://github.com/zelaplagg/mcp-audit
+      - name: Scan and write SARIF
+        run: mcp-audit scan --format sarif -o mcp-audit.sarif --sarif-uri src/server.ts --fail-on none -- node dist/index.js
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: mcp-audit.sarif
+      - name: Fail on high or critical findings
+        run: mcp-audit scan --fail-on high -- node dist/index.js

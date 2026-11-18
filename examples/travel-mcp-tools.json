@@ -1,0 +1,160 @@
+{
+  "serverInfo": {
+    "name": "travel-mcp",
+    "version": "0.1.0"
+  },
+  "tools": [
+    {
+      "name": "geocode_place",
+      "description": "Find coordinates for a place name or address (OpenStreetMap Nominatim). Use this before get_forecast or find_nearby.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 200,
+            "description": "Place name or address, e.g. \"Vienna\" or \"Prater, Wien\""
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5,
+            "default": 3,
+            "description": "Maximum number of matches"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": true
+      }
+    },
+    {
+      "name": "get_forecast",
+      "description": "Daily weather forecast for coordinates (Open-Meteo): conditions, min/max temperature, precipitation, wind.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "latitude": {
+            "type": "number",
+            "minimum": -90,
+            "maximum": 90
+          },
+          "longitude": {
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180
+          },
+          "days": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 16,
+            "default": 3,
+            "description": "Number of days, 1-16"
+          }
+        },
+        "required": [
+          "latitude",
+          "longitude"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": true
+      }
+    },
+    {
+      "name": "find_nearby",
+      "description": "Find named places of the given categories near coordinates (OpenStreetMap Overpass), sorted by distance. To search several categories (e.g. museums and cafes), pass them all in the categories array of ONE call; do not call once per category.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "latitude": {
+            "type": "number",
+            "minimum": -90,
+            "maximum": 90
+          },
+          "longitude": {
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180
+          },
+          "categories": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "museum",
+                "park",
+                "restaurant",
+                "cafe",
+                "viewpoint",
+                "attraction"
+              ]
+            },
+            "minItems": 1,
+            "maxItems": 6,
+            "description": "One or more categories, combined in a single call"
+          },
+          "radius_m": {
+            "type": "integer",
+            "minimum": 100,
+            "maximum": 5000,
+            "default": 1000,
+            "description": "Search radius in metres"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 30,
+            "default": 10
+          }
+        },
+        "required": [
+          "latitude",
+          "longitude",
+          "categories"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": true
+      }
+    },
+    {
+      "name": "plan_day",
+      "description": "Weather-aware day plan for a place: checks the forecast and suggests outdoor stops on good days and indoor stops (museums, cafes) when rain, wind or extreme temperatures are expected.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "place": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 200,
+            "description": "Place name, e.g. \"Salzburg\""
+          },
+          "date": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "description": "Optional. Date as YYYY-MM-DD within the next 7 days. Omit it to plan for today; do not ask the user for a date."
+          }
+        },
+        "required": [
+          "place"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": true
+      }
+    }
+  ]
+}
